@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
     console.log("[Pix One] Creating PIX payment:", { cpf, name, phone, amount })
 
     // Credenciais Pix One
-    const privateKey = "pk_QEKWYH7yO9mulnMGyQT17GEPogEs6MyuVwGYFLdCQwRM17c8"
-    const secretKey = "sk_qJ3NutAtl5vAkxMtgrshQZ7QQRrWFoByhgPpmPNNTvaItfdA"
+    const privateKey = "pk_pDKKPyxc4TOKmcmfczYlnva2njH8nXqlwTnRJhAhOhS8ydUu"
+    const secretKey = "sk_hxOVqqWK5ueF4kZUZ1JUww61E-NGmXi7Xd5vwN7uuwafGDFy"
     
     // Criar autenticação Basic Auth
     const auth = btoa(`${secretKey}:${privateKey}`)
