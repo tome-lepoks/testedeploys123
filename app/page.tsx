@@ -568,7 +568,7 @@ export default function Home() {
                         const result = await response.json()
                         
                         if (result.success) {
-                          if (result.status === 'paid') {
+                          if (result.payment?.isPaid || result.transaction?.status === 'approved') {
                             alert("✅ Pagamento confirmado! Sua regularização foi processada com sucesso.")
                             
                             // Tracking de conversão UTMFY - Purchase
@@ -593,7 +593,7 @@ export default function Home() {
                               }
                             }
                           } else {
-                            alert(`Status do pagamento: ${result.status}. Aguarde a confirmação.`)
+                            alert(`Status do pagamento: ${result.payment?.statusText || result.transaction?.status}. Aguarde a confirmação.`)
                           }
                         } else {
                           alert("Erro ao verificar pagamento. Tente novamente.")

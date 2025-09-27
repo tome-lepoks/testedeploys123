@@ -13,113 +13,77 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log("[FreePay] Checking transaction status:", transactionId)
+    console.log("[PixONE] Checking transaction status:", transactionId)
 
-    const url = `https://api.freepaybr.com/functions/v1/transactions/${transactionId}`
-    
-    // Obter credenciais baseado no sistema de rotação (3:1)
+    // Obter credenciais da PixONE
     const credentials = getCredentialsForTransaction()
-    const auth = 'Basic ' + Buffer.from(credentials.secretKey + ':x').toString('base64')
-    
-    // Consultando status da transação
-    const response = await fetch(url, {
+    const auth = btoa(`${credentials.secretKey}:${credentials.privateKey}`)
+
+    const response = await fetch(`https://api.pixone.com.br/api/v1/transactions/${transactionId}`, {
       method: 'GET',
       headers: {
-        'Authorization': auth,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json'
       }
     })
 
-    const responseText = await response.text()
-    console.log("[FreePay] Status response:", response.status)
-    console.log("[FreePay] Status body:", responseText)
+    const result = await response.json()
+    console.log("[PixONE] Status response:", response.status)
+    console.log("[PixONE] Status body:", JSON.stringify(result, null, 2))
 
-    if (!response.ok) {
-      console.log("[FreePay] Status error - Status:", response.status, "Response:", responseText)
+    if (response.ok && result.success) {
+      const transactionData = result.data
       
-      // Tentar extrair mensagem de erro da resposta
-      let errorMessage = `FreePay status error: ${response.status}`
-      try {
-        const errorData = JSON.parse(responseText)
-        errorMessage = errorData.message || errorData.error || errorMessage
-      } catch (e) {
-        errorMessage = responseText || errorMessage
-      }
-      
+      // Mapear status da PixONE para formato padrão
+      const status = transactionData.status
+      const isPaid = status === 'approved'
+      const isWaiting = status === 'pending'
+      const isRefused = status === 'cancelled'
+      const isRefunded = status === 'refunded'
+      const isCanceled = status === 'cancelled'
+      const isExpired = status === 'expired'
+
+      return NextResponse.json({
+        success: true,
+        transaction: {
+          id: transactionId,
+          status: status,
+          amount: transactionData.amount,
+          paidAmount: transactionData.paidAmount,
+          refundedAmount: transactionData.refundedAmount,
+          paymentMethod: transactionData.paymentMethod,
+          createdAt: transactionData.createdAt,
+          updatedAt: transactionData.updatedAt,
+          paidAt: transactionData.paidAt,
+          customer: transactionData.customer,
+          pix: transactionData.pix,
+          refusedReason: transactionData.refusedReason
+        },
+        payment: {
+          isPaid: isPaid,
+          isWaiting: isWaiting,
+          isRefused: isRefused,
+          isRefunded: isRefunded,
+          isCanceled: isCanceled,
+          isExpired: isExpired,
+          statusText: getStatusText(status)
+        },
+        provider: 'pixone',
+        timestamp: new Date().toISOString()
+      })
+    } else {
+      console.error("[PixONE] Status error:", result)
       return NextResponse.json({
         success: false,
-        error: errorMessage,
-        provider: 'freepay'
+        error: result.message || "Erro ao consultar status da transação"
       }, { status: response.status })
     }
 
-    let transactionData
-    try {
-      transactionData = JSON.parse(responseText)
-      console.log("[FreePay] Transaction status retrieved successfully:", transactionData)
-    } catch (parseError) {
-      console.log("[FreePay] Failed to parse status response as JSON:", parseError)
-      return NextResponse.json({
-        success: false,
-        error: "Resposta inválida da FreePay",
-        provider: 'freepay'
-      }, { status: 500 })
-    }
-
-    // Extrair informações relevantes da transação
-    const status = transactionData.status
-    const amount = transactionData.amount
-    const paidAmount = transactionData.paidAmount
-    const refundedAmount = transactionData.refundedAmount
-    const paymentMethod = transactionData.paymentMethod
-    const createdAt = transactionData.createdAt
-    const updatedAt = transactionData.updatedAt
-    const paidAt = transactionData.paidAt
-    const customer = transactionData.customer
-    const pix = transactionData.pix
-    const refusedReason = transactionData.refusedReason
-
-    // Determinar se o pagamento foi concluído
-    const isPaid = status === 'paid' || status === 'authorized'
-    const isWaiting = status === 'waiting_payment' || status === 'processing'
-    const isRefused = status === 'refused'
-    const isRefunded = status === 'refunded'
-    const isCanceled = status === 'canceled'
-
-    return NextResponse.json({
-      success: true,
-      transaction: {
-        id: transactionId,
-        status: status,
-        amount: amount,
-        paidAmount: paidAmount,
-        refundedAmount: refundedAmount,
-        paymentMethod: paymentMethod,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-        paidAt: paidAt,
-        customer: customer,
-        pix: pix,
-        refusedReason: refusedReason
-      },
-      payment: {
-        isPaid: isPaid,
-        isWaiting: isWaiting,
-        isRefused: isRefused,
-        isRefunded: isRefunded,
-        isCanceled: isCanceled,
-        statusText: getStatusText(status)
-      },
-      provider: 'freepay',
-      timestamp: new Date().toISOString()
-    })
-
   } catch (error) {
-    console.error("[FreePay] Error checking transaction status:", error)
+    console.error("[PixONE] Error checking transaction status:", error)
     
     if (error instanceof Error) {
-      console.error("[FreePay] Error details:", {
+      console.error("[PixONE] Error details:", {
         message: error.message,
         stack: error.stack,
         name: error.name
@@ -130,7 +94,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: error instanceof Error ? error.message : "Erro interno do servidor",
-        provider: 'freepay',
+        provider: 'pixone',
         timestamp: new Date().toISOString()
       },
       { status: 500 }
@@ -141,16 +105,11 @@ export async function GET(request: NextRequest) {
 // Função auxiliar para traduzir status
 function getStatusText(status: string): string {
   const statusMap: { [key: string]: string } = {
-    'processing': 'Processando',
-    'authorized': 'Autorizado',
-    'paid': 'Pago',
-    'refunded': 'Estornado',
-    'waiting_payment': 'Aguardando Pagamento',
-    'refused': 'Recusado',
-    'chargedback': 'Chargeback',
-    'canceled': 'Cancelado',
-    'in_protest': 'Em Protesto',
-    'partially_paid': 'Parcialmente Pago'
+    'pending': 'Aguardando Pagamento',
+    'approved': 'Pago',
+    'cancelled': 'Cancelado',
+    'expired': 'Expirado',
+    'refunded': 'Estornado'
   }
   
   return statusMap[status] || status

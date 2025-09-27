@@ -1,22 +1,22 @@
 /**
- * Sistema de Credenciais Únicas FreePay
+ * Sistema de Credenciais Únicas PixONE
  * 
  * Este módulo implementa um sistema simplificado com credenciais únicas
  * para todas as transações, removendo a complexidade da rotação.
  * 
- * Todas as transações usam a mesma credencial da FreePay.
+ * Todas as transações usam a mesma credencial da PixONE.
  */
 
-interface FreePayCredentials {
+interface PixOneCredentials {
   secretKey: string
-  companyId: string
+  privateKey: string
   name: string
 }
 
-// Credenciais únicas da FreePay (sem rotação)
-const FREE_PAY_CREDENTIALS: FreePayCredentials = {
-  secretKey: "sk_live_C4C97UanuShcerwwfBIWYnTdqthmTrh2s5hYXBntPdb8q3bL",
-  companyId: "b16176ba-9c1c-49d1-ad5d-aa56ef88a05d",
+// Credenciais únicas da PixONE (sem rotação)
+const PIXONE_CREDENTIALS: PixOneCredentials = {
+  secretKey: "sk_hxOVqqWK5ueF4kZUZ1JUww61E-NGmXi7Xd5vwN7uuwafGDFy",
+  privateKey: "pk_pDKKPyxc4TOKmcmfczYlnva2njH8nXqlwTnRJhAhOhS8ydUu",
   name: "unified"
 }
 
@@ -24,30 +24,30 @@ const FREE_PAY_CREDENTIALS: FreePayCredentials = {
 let transactionCounter = 0
 
 /**
- * Obtém as credenciais únicas da FreePay (sem rotação)
+ * Obtém as credenciais únicas da PixONE (sem rotação)
  * 
  * Sistema simplificado: sempre retorna a mesma credencial
  */
-export function getCredentialsForTransaction(): FreePayCredentials {
+export function getCredentialsForTransaction(): PixOneCredentials {
   // Incrementa o contador para estatísticas
   transactionCounter++
   
   // Sempre retorna a mesma credencial
-  return FREE_PAY_CREDENTIALS
+  return PIXONE_CREDENTIALS
 }
 
 /**
  * Obtém as credenciais únicas (para casos especiais)
  */
-export function getPrimaryCredentials(): FreePayCredentials {
-  return FREE_PAY_CREDENTIALS
+export function getPrimaryCredentials(): PixOneCredentials {
+  return PIXONE_CREDENTIALS
 }
 
 /**
  * Obtém as credenciais únicas (alias para compatibilidade)
  */
-export function getSecondaryCredentials(): FreePayCredentials {
-  return FREE_PAY_CREDENTIALS
+export function getSecondaryCredentials(): PixOneCredentials {
+  return PIXONE_CREDENTIALS
 }
 
 /**
@@ -92,11 +92,11 @@ export function validateCredentials(): {
   const errors: string[] = []
   
   // Validar credenciais únicas
-  const primaryValid = FREE_PAY_CREDENTIALS.secretKey.startsWith('sk_live_') && 
-                      FREE_PAY_CREDENTIALS.companyId.length > 0
+  const primaryValid = PIXONE_CREDENTIALS.secretKey.startsWith('sk_') && 
+                      PIXONE_CREDENTIALS.privateKey.startsWith('pk_')
   
   if (!primaryValid) {
-    errors.push("FreePay credentials are invalid")
+    errors.push("PixONE credentials are invalid")
   }
   
   return {

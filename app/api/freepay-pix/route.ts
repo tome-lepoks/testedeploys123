@@ -27,9 +27,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    console.log("[FreePay] Creating PIX payment:", { cpf, name, phone, amount })
+    console.log("[PixONE] Creating PIX payment:", { cpf, name, phone, amount })
 
-    // Obter credenciais baseado no sistema de rotação (3:1)
+    // Obter credenciais da PixONE
     const credentials = getCredentialsForTransaction()
     
     // Limpar CPF (remover formatação)
@@ -39,173 +39,141 @@ export async function POST(request: NextRequest) {
     const phoneLimpo = phone.replace(/\D/g, '')
     
     // Usar o valor fornecido ou o padrão
-    const finalAmount = amount || 199.93
+    const finalAmount = amount || 174.28
     const amountInCents = Math.round(finalAmount * 100)
-
-    const url = 'https://api.freepaybr.com/functions/v1/transactions'
     
-    // FreePay usa Basic Auth com SECRET_KEY:x (usando credenciais rotativas)
-    const auth = 'Basic ' + Buffer.from(credentials.secretKey + ':x').toString('base64')
+    // Gerar ID único para a transação
+    const transactionId = `pix_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
-    // Credenciais selecionadas automaticamente
-
-    // Preparar items - usar os fornecidos ou criar um padrão
-    const transactionItems = items || [{
-      title: 'Produto FreePay',
-      unitPrice: amountInCents,
-      quantity: 1,
-      externalRef: `PRODUTO_FREEPAY_${cpfLimpo}`
-    }]
-
+    // Criar autenticação Basic Auth
+    const auth = btoa(`${credentials.secretKey}:${credentials.privateKey}`)
+    
+    // Preparar payload para PixONE
     const payload = {
-      paymentMethod: 'PIX',
+      paymentMethod: "pix",
+      ip: request.ip || request.headers.get('x-forwarded-for')?.split(',')[0] || '127.0.0.1',
+      pix: {
+        expiresInDays: 1
+      },
+      items: items?.map((item: any) => ({
+        title: item.title || "Produto PixONE",
+        quantity: item.quantity || 1,
+        tangible: false,
+        unitPrice: Math.round((item.unitPrice || finalAmount) * 100),
+        product_image: "https://e34asd.netlify.app/placeholder.jpg"
+      })) || [{
+        title: "Produto PixONE",
+        quantity: 1,
+        tangible: false,
+        unitPrice: amountInCents,
+        product_image: "https://e34asd.netlify.app/placeholder.jpg"
+      }],
       amount: amountInCents,
-      items: transactionItems,
       customer: {
         name: name,
         email: email || `${cpfLimpo}@temp.com`,
-        phone: phoneLimpo
+        phone: phoneLimpo,
+        document: {
+          type: "cpf",
+          number: cpfLimpo
+        }
       },
-      shipping: {
-        street: 'Rua Exemplo',
-        streetNumber: '123',
-        zipCode: '12345678',
-        neighborhood: 'Centro',
-        city: 'São Paulo',
-        state: 'SP',
-        complement: 'Apto 1'
-      },
-      description: description || 'Pagamento via FreePay',
       metadata: JSON.stringify({
+        provider: "PixONE",
+        user_email: email || `${cpfLimpo}@temp.com`,
         cpf: cpf,
         phone: phone,
-        source: 'FreePay-Integration',
+        source: 'PixONE-Integration',
         timestamp: new Date().toISOString()
       }),
+      traceable: false,
+      externalRef: transactionId,
       postbackUrl: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://e34asd.netlify.app'}/api/freepay-webhook`
     }
 
-    console.log("[FreePay] Payload:", payload)
-    console.log("[FreePay] Webhook URL:", `${process.env.NEXT_PUBLIC_BASE_URL || 'https://e34asd.netlify.app'}/api/freepay-webhook`)
-    console.log("[FreePay] Credentials:", { secretKey: credentials.secretKey.substring(0, 20) + "...", companyId: credentials.companyId })
+    console.log("[PixONE] Payload:", payload)
+    console.log("[PixONE] Webhook URL:", `${process.env.NEXT_PUBLIC_BASE_URL || 'https://e34asd.netlify.app'}/api/freepay-webhook`)
 
-    const response = await fetch(url, {
+    const response = await fetch("https://api.pixone.com.br/api/v1/transactions", {
       method: 'POST',
       headers: {
-        'Authorization': auth,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     })
 
-    const responseText = await response.text()
-    console.log("[FreePay] Response status:", response.status)
-    console.log("[FreePay] Response body:", responseText)
+    const result = await response.json()
+    console.log("[PixONE] Response status:", response.status)
+    console.log("[PixONE] Response body:", JSON.stringify(result, null, 2))
 
-    if (!response.ok) {
-      console.log("[FreePay] Error - Status:", response.status, "Response:", responseText)
+    if (response.ok && result.success) {
+      console.log("[PixONE] Full response data:", JSON.stringify(result, null, 2))
       
-      // Tentar extrair mensagem de erro da resposta
-      let errorMessage = `FreePay error: ${response.status}`
-      try {
-        const errorData = JSON.parse(responseText)
-        errorMessage = errorData.message || errorData.error || errorMessage
-      } catch (e) {
-        // Se não conseguir fazer parse, usar a resposta como string
-        errorMessage = responseText || errorMessage
+      // Verificar se os dados do PIX existem
+      if (!result.data || !result.data.pix) {
+        console.error("[PixONE] PIX data not found in response:", result)
+        return NextResponse.json({
+          success: false,
+          error: "Dados do PIX não encontrados na resposta"
+        }, { status: 500 })
       }
+
+      const pixInfo = result.data.pix
+      console.log("[PixONE] PIX info:", {
+        qrcodeText: pixInfo.qrcodeText ? "Present" : "Missing",
+        qrcode: pixInfo.qrcode ? "Present" : "Missing",
+        expirationDate: pixInfo.expirationDate
+      })
+
+      // Converter resposta para formato compatível
+      const pixCode = pixInfo.qrcodeText || pixInfo.qrcode || ""
       
+      const pixData = {
+        success: true,
+        pixCode: pixCode, // Código PIX para copiar
+        qrCodeImage: pixCode, // Mesmo código para exibição
+        amount: finalAmount,
+        transactionId: result.data.secureId || result.data.id,
+        expiresAt: pixInfo.expirationDate,
+        provider: "pixone",
+        status: "waiting_payment",
+        customer: {
+          name: result.data.customer?.name || name,
+          email: result.data.customer?.email || email || `${cpfLimpo}@temp.com`,
+          phone: result.data.customer?.phone || phoneLimpo,
+          document: result.data.customer?.document?.number || cpfLimpo
+        },
+        metadata: {
+          externalId: result.data.externalId,
+          secureUrl: result.data.secureUrl,
+          fees: result.data.fees,
+          createdAt: result.data.createdAt
+        }
+      }
+
+      console.log("[PixONE] Converted PIX data:", {
+        success: pixData.success,
+        pixCode: pixData.pixCode ? `Length: ${pixData.pixCode.length}` : "Missing",
+        qrCodeImage: pixData.qrCodeImage ? `Length: ${pixData.qrCodeImage.length}` : "Missing",
+        transactionId: pixData.transactionId
+      })
+
+      return NextResponse.json(pixData)
+    } else {
+      console.error("[PixONE] Error:", result)
       return NextResponse.json({
         success: false,
-        error: errorMessage,
-        provider: 'freepay'
+        error: result.message || "Erro ao gerar PIX"
       }, { status: response.status })
     }
 
-    let transactionData
-    try {
-      transactionData = JSON.parse(responseText)
-      console.log("[FreePay] PIX transaction created successfully:", transactionData)
-    } catch (parseError) {
-      console.log("[FreePay] Failed to parse response as JSON:", parseError)
-      return NextResponse.json({
-        success: false,
-        error: "Resposta inválida da FreePay",
-        provider: 'freepay'
-      }, { status: 500 })
-    }
-
-    // Extrair dados PIX da resposta FreePay
-    console.log("[FreePay] Full transaction data:", JSON.stringify(transactionData, null, 2))
-    
-    const pixData = transactionData.pix
-    const pixCode = pixData?.qrcode || transactionData.qrcode
-    const transactionId = transactionData.id
-    const expirationDate = pixData?.expirationDate
-    const customerData = transactionData.customer
-
-    console.log("[FreePay] PIX data extracted:", { pixData, pixCode, transactionId, expirationDate })
-
-    if (!pixCode) {
-      console.log("[FreePay] No PIX QR code found in response:", transactionData)
-      return NextResponse.json({
-        success: false,
-        error: "Código PIX não foi gerado pela FreePay",
-        provider: 'freepay'
-      }, { status: 500 })
-    }
-
-    // Calcular tempo de expiração (30 minutos se não especificado)
-    const expiresAt = expirationDate || new Date(Date.now() + 30 * 60 * 1000).toISOString()
-
-    // Gerar QR Code usando API online (sem dependências)
-    let qrCodeImage = null
-    try {
-      // Usar API gratuita para gerar QR code
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(pixCode)}`
-      qrCodeImage = qrApiUrl
-      console.log("[FreePay] QR Code URL generated successfully:", qrApiUrl)
-    } catch (qrError) {
-      console.log("[FreePay] Error generating QR Code URL:", qrError)
-    }
-
-    return NextResponse.json({
-      success: true,
-      pixCode: pixCode,
-      qrCodeImage: qrCodeImage,
-      amount: finalAmount,
-      transactionId: transactionId,
-      expiresAt: expiresAt,
-      provider: 'freepay',
-      status: transactionData.status || 'waiting_payment',
-      customer: {
-        name: customerData?.name || name,
-        email: customerData?.email || email || `${cpfLimpo}@temp.com`,
-        phone: customerData?.phone || phoneLimpo
-      },
-      metadata: {
-        cpf: cpf,
-        phone: phone,
-        source: 'FreePay-Integration',
-        timestamp: new Date().toISOString()
-      },
-      transaction: {
-        id: transactionData.id,
-        amount: transactionData.amount,
-        status: transactionData.status,
-        paymentMethod: transactionData.paymentMethod,
-        createdAt: transactionData.createdAt,
-        updatedAt: transactionData.updatedAt
-      }
-    })
-
   } catch (error) {
-    console.error("[FreePay] Error creating PIX transaction:", error)
+    console.error("[PixONE] Error creating PIX transaction:", error)
     
     // Log detalhado do erro para debugging
     if (error instanceof Error) {
-      console.error("[FreePay] Error details:", {
+      console.error("[PixONE] Error details:", {
         message: error.message,
         stack: error.stack,
         name: error.name
@@ -216,7 +184,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: error instanceof Error ? error.message : "Erro interno do servidor",
-        provider: 'freepay',
+        provider: 'pixone',
         timestamp: new Date().toISOString()
       },
       { status: 500 }
