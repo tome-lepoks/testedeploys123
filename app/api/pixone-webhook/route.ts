@@ -1,6 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
+  // API PixONE desabilitada - usando apenas FreePay
+  return NextResponse.json({
+    success: false,
+    error: "API PixONE desabilitada. Use a API FreePay.",
+    provider: 'pixone-disabled'
+  }, { status: 503 })
+
   console.log("[Pix One Webhook] ===== WEBHOOK CHAMADO PELA PIX ONE =====")
   console.log("[Pix One Webhook] Timestamp:", new Date().toISOString())
   console.log("[Pix One Webhook] URL:", request.url)

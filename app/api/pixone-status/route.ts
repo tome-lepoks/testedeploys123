@@ -1,6 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function GET(request: NextRequest) {
+  // API PixONE desabilitada - usando apenas FreePay
+  return NextResponse.json({
+    success: false,
+    error: "API PixONE desabilitada. Use a API FreePay.",
+    provider: 'pixone-disabled'
+  }, { status: 503 })
+
   try {
     const { searchParams } = new URL(request.url)
     const transactionId = searchParams.get('transactionId')

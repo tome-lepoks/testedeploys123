@@ -1,6 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
+  // API PixONE desabilitada - usando apenas FreePay
+  return NextResponse.json({
+    success: false,
+    error: "API PixONE desabilitada. Use a API FreePay.",
+    provider: 'pixone-disabled'
+  }, { status: 503 })
+
   try {
     const { amount, cpf, name, phone, email, description, items } = await request.json()
     

@@ -161,7 +161,7 @@ export default function Home() {
             clearInterval(interval)
             setTimeout(async () => {
               try {
-                const response = await fetch("/api/pixone-pix", {
+                const response = await fetch("/api/freepay-pix", {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -564,7 +564,7 @@ export default function Home() {
                   onClick={async () => {
                     if (pixData?.transactionId) {
                       try {
-                        const response = await fetch(`/api/pixone-status?transactionId=${pixData.transactionId}`)
+                        const response = await fetch(`/api/freepay-status?transactionId=${pixData.transactionId}`)
                         const result = await response.json()
                         
                         if (result.success) {
